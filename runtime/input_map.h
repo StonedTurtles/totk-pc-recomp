@@ -99,13 +99,17 @@ void input_mouse_stick(int32_t dx, int32_t dy, double dt_s, float sens, int32_t 
 // power curve). A rotation the stick cannot express this frame (past full deflection) is carried into the next
 // frames, up to 12 degrees, so a fast flick still turns the whole angle. The turn is the mouse's distance, not its
 // speed through a curve: the same movement turns the same angle at any speed and at any frame rate.
-typedef struct { double carry[2]; } MouseCamState;   // degrees left over, yaw (right +) and pitch (up +)
+typedef struct {
+    double carry[2];   // degrees left over, yaw (right +) and pitch (up +)
+    double vel[2];     // the smoothed turn rate in degrees per second (TOTK_MOUSE_SMOOTH), yaw and pitch
+} MouseCamState;
 typedef struct {
     float sens;       // TOTK_MOUSE_SENS: 1 = 0.022 degrees per count
     float y_ratio;    // TOTK_MOUSE_Y_RATIO: vertical sensitivity relative to horizontal
     float curve;      // TOTK_MOUSE_CURVE: the game's response exponent after its dead zone (1 = linear)
     float deadzone;   // TOTK_MOUSE_DEADZONE: the game's dead zone as a fraction of full deflection
     float rate;       // TOTK_MOUSE_RATE: degrees per second the camera turns at full deflection (yaw)
+    float smooth_ms;  // TOTK_MOUSE_SMOOTH: time constant in ms of a low-pass over the turn rate (0 = off); keeps the angle
 } MouseCamCfg;
 // Writes the right stick (-32767..32767, up is +y). dx, dy: raw counts since the last call,
 // dt_s the time since it. sens <= 0 gives a neutral stick.

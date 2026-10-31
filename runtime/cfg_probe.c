@@ -1,4 +1,5 @@
 // --probe-cfg: totk.ini parsing, the environment override and a missing file (cfg.c). Needs no game files.
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -276,6 +277,22 @@ int probe_cfg(void) {
         CHECK(o[0] == 32767 && cs.carry[0] > 0 && cs.carry[0] <= 12.0, "mouse camera: a flick saturates and the rest is carried (12 degrees at most)");
         input_mouse_camera(&cs, 0, 0, 1.0 / 60, &cc, o);
         CHECK(o[0] > 0, "mouse camera: the carry keeps turning after the mouse stops");
+        {   // smoothing keeps the angle: a burst of counts followed by silence turns the same total, spread over the frames after
+            const MouseCamCfg sm = {1, 1, 2, 0.02f, 86, 12};
+            MouseCamState ss = {{0, 0}, {0, 0}};
+            double turned = 0;
+            for (int f = 0; f < 200; f++) {
+                input_mouse_camera(&ss, f < 20 ? 3 : 0, 0, 1.0 / 144, &sm, o);
+                const double raw = o[0] / 32767.0, post = raw > 0.02 ? pow((raw - 0.02) / 0.98, 2.0) : 0;
+                turned += post * 86 * (1.0 / 144);
+            }
+            CHECK(fabs(turned - 20 * 3 * 0.022) < 0.05 * 20 * 3 * 0.022, "mouse camera: smoothing keeps the angle moved");
+            ss = (MouseCamState){{0, 0}, {0, 0}};
+            input_mouse_camera(&ss, 3, 0, 1.0 / 144, &sm, o);
+            const int32_t first = o[0];
+            input_mouse_camera(&ss, 0, 0, 1.0 / 144, &sm, o);
+            CHECK(first > 0 && o[0] > 0, "mouse camera: smoothing spreads a burst over the next frames");
+        }
         const MouseCamCfg off = {0, 1, 2, 0.2f, 85};
         input_mouse_camera(&cs, 50, 0, 1.0 / 60, &off, o);
         CHECK(o[0] == 0 && cs.carry[0] == 0, "mouse camera: sensitivity 0 is off");

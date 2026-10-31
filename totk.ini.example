@@ -156,6 +156,9 @@
 # mouse_curve = 2
 # mouse_deadzone = 0.02
 # mouse_rate = 86
+# Mouse smoothing: time constant in milliseconds of a low-pass over the camera turn rate (0 to 50; 0 = off). Removes
+# the frame-to-frame jitter of a high refresh rate; the angle you move is kept, only spread over a few frames.
+# mouse_smooth = 12
 # mouse_y_ratio = 1
 # Write the input of this run to a file that replays as a script (docs/controls.md, "Scripted input"). Default: off.
 # input_record = input.txt

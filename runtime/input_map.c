@@ -336,12 +336,29 @@ void input_mouse_camera(MouseCamState *st, int32_t dx, int32_t dy, double dt_s, 
     if (!st || !c) return;
     if (!(dt_s > 0) || !(c->sens > 0)) {
         st->carry[0] = st->carry[1] = 0;
+        st->vel[0] = st->vel[1] = 0;
         return;
     }
     const double sens = c->sens, curve = clampd(c->curve, 1.0, 3.0), dz = clampd(c->deadzone, 0.0, 0.5);
     const double rate = c->rate >= 1 ? c->rate : 85.0;
-    const double yaw = dx * MOUSE_DEG_PER_COUNT * sens + st->carry[0];                                  // right +
-    const double pitch = -dy * MOUSE_DEG_PER_COUNT * sens * clampd(c->y_ratio, 0.25, 4.0) + st->carry[1];   // up +
+    double in_yaw = dx * MOUSE_DEG_PER_COUNT * sens;                                      // right +
+    double in_pitch = -dy * MOUSE_DEG_PER_COUNT * sens * clampd(c->y_ratio, 0.25, 4.0);   // up +
+    if (c->smooth_ms > 0) {
+        // A frame holds only a few counts, and the game turns the camera by the stick of the moment with no smoothing
+        // of its own, so the per-frame rate is noise. Low-pass the rate: the angle moved is kept (what the filter holds
+        // back is turned in the frames after the mouse stops), only its timing is spread over a few frames.
+        const double a = 1.0 - exp(-dt_s / (clampd(c->smooth_ms, 0.0, 50.0) / 1000.0));
+        st->vel[0] += (in_yaw / dt_s - st->vel[0]) * a;
+        st->vel[1] += (in_pitch / dt_s - st->vel[1]) * a;
+        if (fabs(st->vel[0]) < 0.01) st->vel[0] = 0;
+        if (fabs(st->vel[1]) < 0.01) st->vel[1] = 0;
+        in_yaw = st->vel[0] * dt_s;
+        in_pitch = st->vel[1] * dt_s;
+    } else {
+        st->vel[0] = st->vel[1] = 0;
+    }
+    const double yaw = in_yaw + st->carry[0];
+    const double pitch = in_pitch + st->carry[1];
     // the post-curve amount of full rate that turns that angle in dt_s; past full deflection the direction is kept
     double ux = yaw / dt_s / rate, uy = pitch / dt_s / (rate * MOUSE_PITCH_RATE);
     double m = sqrt(ux * ux + uy * uy);

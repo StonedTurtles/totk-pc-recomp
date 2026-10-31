@@ -75,6 +75,7 @@ The inverse needs the game's stick response. The defaults below were measured on
 | `mouse_curve` | 2 (1 to 3) | the game's response exponent after its dead zone; 1 is linear |
 | `mouse_deadzone` | 0.02 (0 to 0.5) | the game's dead zone, as a fraction of full deflection |
 | `mouse_rate` | 86 (20 to 300) | degrees per second the camera turns at full deflection |
+| `mouse_smooth` | 12 (0 to 50) | milliseconds: a low-pass over the turn rate that removes frame-to-frame jitter; the angle moved is kept, 0 turns it off |
 
 `TOTK_MOUSE_SENS` (0 to 10, default 1; higher turns faster, 0 turns the mouse camera and the cursor capture off). While the window is the foreground window the cursor is hidden and confined to the client area. It is released on focus loss, minimise, while F11 changes the window, during a size or move loop and while a text entry is open. Esc releases it by hand: the cursor shows, the mouse camera and mouse buttons stop, and the window can be moved, minimised or closed. A mouse click inside the client area captures it again; that click does not reach the game. Activating the window by a click on its title bar or border does not capture, so it can be dragged or closed right away; Alt+Tab or a click in the client area captures as before. `TOTK_INPUT=none` disables the capture too.
 
