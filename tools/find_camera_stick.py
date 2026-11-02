@@ -86,6 +86,44 @@ def show(words, base, i, before=14, after=14):
         print(f'    {base + 4 * j:08x}: {words[j]:08x}{mark}')
 
 
+def const_refs(image, words, base):
+    """Word indexes that load 0.005f from memory: `ldr s, <literal>` or adrp + (add +) ldr s onto a 4-byte copy of it.
+    The constant is not always built with movz / movk; the compiler may keep it in the read-only data."""
+    needle = struct.pack('<I', DEAD_ZONE_BITS)
+    addrs = set()
+    pos = image.find(needle)
+    while pos >= 0:
+        if pos % 4 == 0:
+            addrs.add(pos)
+        pos = image.find(needle, pos + 1)
+    out = []
+    n = len(words)
+    for i, w in enumerate(words):
+        pc = base + 4 * i
+        if w & 0xFF000000 == 0x1C000000:   # ldr s<t>, <literal>
+            imm = (w >> 5) & 0x7FFFF
+            if imm & 0x40000:
+                imm -= 0x80000
+            if pc + imm * 4 in addrs:
+                out.append(i)
+        elif w & 0x9F000000 == 0x90000000:   # adrp
+            imm = ((w >> 5) & 0x7FFFF) << 2 | (w >> 29) & 3
+            if imm & 0x100000:
+                imm -= 0x200000
+            page, rd = (pc & ~0xFFF) + (imm << 12), w & 31
+            for k in range(i + 1, min(i + 4, n)):
+                v = words[k]
+                if v & 0xFFC00000 == 0xBD400000 and (v >> 5) & 31 == rd and page + ((v >> 10) & 0xFFF) * 4 in addrs:
+                    out.append(k)
+                elif v & 0xFFC00000 == 0x91000000 and (v >> 5) & 31 == rd and v & 31 == rd:   # add xd, xd, #lo
+                    lo = (v >> 10) & 0xFFF
+                    for m in range(k + 1, min(k + 3, n)):
+                        u = words[m]
+                        if u & 0xFFC00000 == 0xBD400000 and (u >> 5) & 31 == rd and page + lo + ((u >> 10) & 0xFFF) * 4 in addrs:
+                            out.append(m)
+    return out
+
+
 def summarize(words, base, i, span=700):
     """What the function around the 0.005f at word i does, in a few lines: its stores and loads of floats at a
     camera-sized offset, the calls it makes, where it ends."""
@@ -138,17 +176,22 @@ def main():
         tag = '   <== same function as a store pair' if f in pair_funcs and f is not None else ''
         print(f'  {off + 4 * i:#x} (movk at {off + 4 * k:#x}); function from about '
               f'{(off + 4 * f) if f is not None else 0:#x}{tag}')
-    print('\n== what each function with a 0.005f does (float stores / loads at offsets >= 0x100, calls)')
+    refs = const_refs(nso.image, words, off)
+    print(f'\n== 0.005f loaded from memory (literal or adrp): {len(refs)}')
+    for i in refs:
+        f = function_start(words, i)
+        print(f'  {off + 4 * i:#x}; function from about {(off + 4 * f) if f is not None else 0:#x}')
+    print('\n== what each function with a 0.005f does (float stores / loads at offsets >= 0x100 off a register other than sp, calls)')
     seen = set()
-    for i, _ in consts:
+    for i in [c[0] for c in consts] + refs:
         r = summarize(words, off, i)
         if r is None or r[0] in seen:
             continue
         seen.add(r[0])
         f, end, calls, stores, loads = r
         print(f'\n  function {off + 4 * f:#x} .. {off + 4 * end:#x}, {end - f + 1} words, {calls} calls')
-        print('    stores:', ' '.join(f's{t},[x{n},#{o:#x}]@{a:x}' for a, t, n, o in stores if o >= 0x100) or '-')
-        print('    loads: ', ' '.join(f's{t},[x{n},#{o:#x}]@{a:x}' for a, t, n, o in loads if o >= 0x100) or '-')
+        print('    stores:', ' '.join(f's{t},[x{n},#{o:#x}]@{a:x}' for a, t, n, o in stores if o >= 0x100 and n != 31) or '-')
+        print('    loads: ', ' '.join(f's{t},[x{n},#{o:#x}]@{a:x}' for a, t, n, o in loads if o >= 0x100 and n != 31) or '-')
     if not pairs:
         print('\nNo store pair found: the camera layout differs on this version. Send this output anyway; the 0.005f '
               'list narrows the function down.')
