@@ -86,6 +86,31 @@ def show(words, base, i, before=14, after=14):
         print(f'    {base + 4 * j:08x}: {words[j]:08x}{mark}')
 
 
+def summarize(words, base, i, span=700):
+    """What the function around the 0.005f at word i does, in a few lines: its stores and loads of floats at a
+    camera-sized offset, the calls it makes, where it ends."""
+    f = function_start(words, i)
+    if f is None:
+        return None
+    end = f
+    for j in range(f + 1, min(len(words), f + span)):
+        if words[j] == 0xD65F03C0:   # ret
+            end = j
+            break
+    else:
+        end = min(len(words) - 1, f + span)
+    stores, loads, calls = [], [], 0
+    for j in range(f, end + 1):
+        w = words[j]
+        if w & 0xFC000000 == 0x94000000:
+            calls += 1
+        if w & 0xFFC00000 == 0xBD000000:
+            stores.append((base + 4 * j, w & 31, (w >> 5) & 31, ((w >> 10) & 0xFFF) * 4))
+        elif w & 0xFFC00000 == 0xBD400000:
+            loads.append((base + 4 * j, w & 31, (w >> 5) & 31, ((w >> 10) & 0xFFF) * 4))
+    return f, end, calls, stores, loads
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--main', required=True, help='the extracted exefs/main (an NSO)')
@@ -113,6 +138,17 @@ def main():
         tag = '   <== same function as a store pair' if f in pair_funcs and f is not None else ''
         print(f'  {off + 4 * i:#x} (movk at {off + 4 * k:#x}); function from about '
               f'{(off + 4 * f) if f is not None else 0:#x}{tag}')
+    print('\n== what each function with a 0.005f does (float stores / loads at offsets >= 0x100, calls)')
+    seen = set()
+    for i, _ in consts:
+        r = summarize(words, off, i)
+        if r is None or r[0] in seen:
+            continue
+        seen.add(r[0])
+        f, end, calls, stores, loads = r
+        print(f'\n  function {off + 4 * f:#x} .. {off + 4 * end:#x}, {end - f + 1} words, {calls} calls')
+        print('    stores:', ' '.join(f's{t},[x{n},#{o:#x}]@{a:x}' for a, t, n, o in stores if o >= 0x100) or '-')
+        print('    loads: ', ' '.join(f's{t},[x{n},#{o:#x}]@{a:x}' for a, t, n, o in loads if o >= 0x100) or '-')
     if not pairs:
         print('\nNo store pair found: the camera layout differs on this version. Send this output anyway; the 0.005f '
               'list narrows the function down.')
