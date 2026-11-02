@@ -152,6 +152,8 @@ def summarize(words, base, i, span=700):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--main', required=True, help='the extracted exefs/main (an NSO)')
+    ap.add_argument('--dump', nargs=2, metavar=('START', 'END'), help='print the words from START to END (module offsets, hex), '
+                    'eight to a line, and exit')
     ap.add_argument('--context', type=int, default=14, help='words to print around each hit')
     args = ap.parse_args()
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -159,6 +161,12 @@ def main():
     nso = Nso(args.main)
     off, size = nso.text
     text = bytes(nso.image[off:off + size])
+    if args.dump:
+        a, b = int(args.dump[0], 16), int(args.dump[1], 16)
+        w = struct.unpack_from(f'<{(b - a) // 4}I', nso.image, a)
+        for k in range(0, len(w), 8):
+            print(f'{a + 4 * k:08x}: ' + ' '.join(f'{x:08x}' for x in w[k:k + 8]))
+        return
     words, pairs, consts = scan(text, off)
     print(f'{args.main}: .text {size:#x} bytes, {len(words)} words')
 
